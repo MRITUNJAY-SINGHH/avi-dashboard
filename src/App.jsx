@@ -9,8 +9,11 @@ import {
    FiLogIn,
    FiPackage,
    FiPlusCircle,
+   FiRefreshCw,
    FiSettings,
    FiShoppingCart,
+   FiSliders,
+   FiTrash2,
    FiTruck,
    FiUpload,
    FiUser,
@@ -22,15 +25,16 @@ import TopSearchBar from './components/TopSearchBar';
 import NotificationButton from './components/NotificationButton';
 import ProfileMenu from './components/ProfileMenu';
 import DataTable from './components/DataTable';
+import LoginPage from './components/LoginPage';
 import {
    closeProfile,
    setActivePanel,
-   setLoggedIn,
    setNotice,
    setSearchText,
    toggleMenu,
    toggleProfile,
 } from './store/uiSlice';
+import { logout } from './store/authSlice';
 
 const sidebarSections = [
    {
@@ -49,7 +53,6 @@ const sidebarSections = [
       children: [
          { id: 'product-add', label: 'Add Product', icon: FiPlusCircle },
          { id: 'product-view', label: 'View Product', icon: FiEye },
-         { id: 'product-edit', label: 'Edit Product', icon: FiEdit3 },
       ],
    },
    {
@@ -57,9 +60,7 @@ const sidebarSections = [
       label: 'Colors',
       icon: FiGrid,
       children: [
-         { id: 'color-add', label: 'Add Color', icon: FiPlusCircle },
          { id: 'color-view', label: 'View Colors', icon: FiEye },
-         { id: 'color-edit', label: 'Edit Color', icon: FiEdit3 },
       ],
    },
    {
@@ -69,7 +70,14 @@ const sidebarSections = [
       children: [
          { id: 'category-add', label: 'Add Category', icon: FiPlusCircle },
          { id: 'category-view', label: 'View Categories', icon: FiEye },
-         { id: 'category-edit', label: 'Edit Category', icon: FiEdit3 },
+      ],
+   },
+   {
+      id: 'attributes',
+      label: 'Attributes',
+      icon: FiSliders,
+      children: [
+         { id: 'attribute-view', label: 'View Attributes', icon: FiEye },
       ],
    },
    {
@@ -119,6 +127,8 @@ const sidebarSections = [
       icon: FiBox,
       children: [
          { id: 'cart-add', label: 'Add Item To Cart', icon: FiPlusCircle },
+         { id: 'cart-update', label: 'Update Cart Quantity', icon: FiRefreshCw },
+         { id: 'cart-delete', label: 'Remove Cart Item', icon: FiTrash2 },
       ],
    },
 ];
@@ -137,27 +147,11 @@ const sectionMeta = {
       title: 'View Product',
       description: 'POST /get-product-on-category',
    },
-   'product-edit': {
-      title: 'Edit Product',
-      description: 'Edit endpoint not provided in API list yet.',
-   },
-   'color-add': {
-      title: 'Add Color',
-      description: 'Add color endpoint not provided in API list yet.',
-   },
    'color-view': { title: 'View Colors', description: 'GET /get-all-color' },
-   'color-edit': {
-      title: 'Edit Color',
-      description: 'Edit color endpoint not provided in API list yet.',
-   },
    'category-add': { title: 'Add Category', description: 'POST /add-category' },
    'category-view': {
       title: 'View Categories',
       description: 'GET /get-all-category',
-   },
-   'category-edit': {
-      title: 'Edit Category',
-      description: 'Edit category endpoint not provided in API list yet.',
    },
    'shop-owner-add': {
       title: 'Add Shop Owner',
@@ -193,6 +187,18 @@ const sectionMeta = {
       title: 'Add Item To Cart',
       description: 'POST /add-item-cart',
    },
+   'cart-update': {
+      title: 'Update Cart Quantity',
+      description: 'PUT /update-cart-item-quantity',
+   },
+   'cart-delete': {
+      title: 'Remove Cart Item',
+      description: 'DELETE /remove-cart-item/{id}',
+   },
+   'attribute-view': {
+      title: 'View Attributes',
+      description: 'GET /get-all-attribute',
+   },
 };
 
 const toArray = (payload) => {
@@ -225,14 +231,14 @@ const App = () => {
    const dispatch = useDispatch();
 
    const {
-      isLoggedIn,
       searchText,
       profileOpen,
       notice,
       openMenus,
       activePanel,
    } = useSelector((state) => state.ui);
-   const { baseUrl, username, password } = useSelector((state) => state.api);
+   const { baseUrl } = useSelector((state) => state.api);
+   const { isLoggedIn, username, password } = useSelector((state) => state.auth);
 
    const [loading, setLoading] = useState({});
    const [uploadFile, setUploadFile] = useState(null);
@@ -242,6 +248,7 @@ const App = () => {
       products: [],
       colors: [],
       categories: [],
+      attributes: [],
       shopOwners: [],
       shopOwnerDashboard: [],
       salesmen: [],
@@ -310,6 +317,14 @@ const App = () => {
       loginUser: { userName: 'user_demo', passwordHash: 'demo@123' },
       deleteImage: { publicId: '' },
       cart: { cartId: '1', clientId: '29', variantId: '4', quantity: '4' },
+      cartUpdate: {
+         cartId: '1',
+         clientId: '29',
+         cartItemId: '',
+         variantId: '4',
+         quantity: '5',
+      },
+      cartDelete: { cartItemId: '' },
    });
 
    const filteredSidebar = useMemo(() => {
@@ -356,7 +371,7 @@ const App = () => {
       if (withAuth) {
          if (!username || !password) {
             throw new Error(
-               'Set VITE_API_USERNAME and VITE_API_PASSWORD in env for protected APIs.',
+               'Please login first to access protected APIs.',
             );
          }
          headers.Authorization = `Basic ${btoa(`${username}:${password}`)}`;
@@ -748,6 +763,64 @@ const App = () => {
       });
    };
 
+   const loadAttributes = () => {
+      withAction('viewAttributes', async () => {
+         const payload = await apiFetch({
+            path: '/get-all-attribute',
+            method: 'GET',
+            withAuth: true,
+         });
+         setRows((prev) => ({ ...prev, attributes: toArray(payload) }));
+         dispatch(setNotice({ type: 'success', text: 'Attributes loaded.' }));
+      });
+   };
+
+   const submitUpdateCartItem = (event) => {
+      event.preventDefault();
+      withAction('cartUpdate', async () => {
+         await apiFetch({
+            path: '/update-cart-item-quantity',
+            method: 'PUT',
+            withAuth: true,
+            body: {
+               cartId: toInt(forms.cartUpdate.cartId),
+               clientId: toInt(forms.cartUpdate.clientId),
+               totalAmount: '',
+               status: 'A',
+               cartItemDTO: [
+                  {
+                     cartItemId: forms.cartUpdate.cartItemId,
+                     cartId: forms.cartUpdate.cartId,
+                     variantId: forms.cartUpdate.variantId,
+                     quantity: forms.cartUpdate.quantity,
+                     variantPriceTotal: '',
+                     createdBy: '1',
+                     lastUpdatedBy: '1',
+                  },
+               ],
+            },
+         });
+         dispatch(
+            setNotice({ type: 'success', text: 'Cart item quantity updated.' }),
+         );
+      });
+   };
+
+   const deleteCartItem = () => {
+      withAction('cartDelete', async () => {
+         if (!forms.cartDelete.cartItemId)
+            throw new Error('Enter a cart item id.');
+         await apiFetch({
+            path: `/remove-cart-item/${forms.cartDelete.cartItemId}`,
+            method: 'DELETE',
+            withAuth: true,
+         });
+         dispatch(
+            setNotice({ type: 'success', text: 'Cart item removed.' }),
+         );
+      });
+   };
+
    const renderPanel = () => {
       if (activePanel === 'order-create') {
          return (
@@ -932,11 +1005,6 @@ const App = () => {
          );
       }
 
-      if (activePanel === 'product-edit')
-         return (
-            <PlaceholderPanel message='Edit product endpoint is not provided yet.' />
-         );
-
       if (activePanel === 'color-view') {
          return (
             <div className='space-y-4'>
@@ -951,15 +1019,6 @@ const App = () => {
             </div>
          );
       }
-
-      if (activePanel === 'color-add')
-         return (
-            <PlaceholderPanel message='Add color endpoint is not in your API list.' />
-         );
-      if (activePanel === 'color-edit')
-         return (
-            <PlaceholderPanel message='Edit color endpoint is not in your API list.' />
-         );
 
       if (activePanel === 'category-add') {
          return (
@@ -1003,11 +1062,6 @@ const App = () => {
             </div>
          );
       }
-
-      if (activePanel === 'category-edit')
-         return (
-            <PlaceholderPanel message='Edit category endpoint is not provided.' />
-         );
 
       if (activePanel === 'shop-owner-add') {
          return (
@@ -1349,42 +1403,100 @@ const App = () => {
          );
       }
 
+      if (activePanel === 'cart-update') {
+         return (
+            <form className='space-y-4' onSubmit={submitUpdateCartItem}>
+               <div className='grid gap-4 md:grid-cols-2'>
+                  <input
+                     className='input'
+                     placeholder='Cart id'
+                     value={forms.cartUpdate.cartId}
+                     onChange={(e) =>
+                        setFormValue('cartUpdate', 'cartId', e.target.value)
+                     }
+                  />
+                  <input
+                     className='input'
+                     placeholder='Client id'
+                     value={forms.cartUpdate.clientId}
+                     onChange={(e) =>
+                        setFormValue('cartUpdate', 'clientId', e.target.value)
+                     }
+                  />
+                  <input
+                     className='input'
+                     placeholder='Cart item id'
+                     value={forms.cartUpdate.cartItemId}
+                     onChange={(e) =>
+                        setFormValue('cartUpdate', 'cartItemId', e.target.value)
+                     }
+                  />
+                  <input
+                     className='input'
+                     placeholder='Variant id'
+                     value={forms.cartUpdate.variantId}
+                     onChange={(e) =>
+                        setFormValue('cartUpdate', 'variantId', e.target.value)
+                     }
+                  />
+                  <input
+                     className='input'
+                     placeholder='Quantity'
+                     value={forms.cartUpdate.quantity}
+                     onChange={(e) =>
+                        setFormValue('cartUpdate', 'quantity', e.target.value)
+                     }
+                  />
+               </div>
+               <button className='btn-primary' disabled={loading.cartUpdate}>
+                  {loading.cartUpdate ? 'Saving...' : 'Update Cart Quantity'}
+               </button>
+            </form>
+         );
+      }
+
+      if (activePanel === 'cart-delete') {
+         return (
+            <div className='space-y-4'>
+               <input
+                  className='input max-w-lg'
+                  placeholder='Cart item id'
+                  value={forms.cartDelete.cartItemId}
+                  onChange={(e) =>
+                     setFormValue('cartDelete', 'cartItemId', e.target.value)
+                  }
+               />
+               <button
+                  className='btn-primary bg-rose-600 hover:bg-rose-500'
+                  onClick={deleteCartItem}
+                  disabled={loading.cartDelete}
+               >
+                  {loading.cartDelete ? 'Deleting...' : 'Remove Cart Item'}
+               </button>
+            </div>
+         );
+      }
+
+      if (activePanel === 'attribute-view') {
+         return (
+            <div className='space-y-4'>
+               <button
+                  className='btn-primary'
+                  onClick={loadAttributes}
+                  disabled={loading.viewAttributes}
+               >
+                  {loading.viewAttributes ? 'Loading...' : 'Load Attributes'}
+               </button>
+               <DataTable rows={rows.attributes} />
+            </div>
+         );
+      }
+
       return null;
    };
 
    if (!isLoggedIn) {
-      return (
-         <div className='min-h-screen bg-[radial-gradient(circle_at_top_right,_#1f2937,_#0f172a_55%)] p-4 text-slate-100 md:p-8'>
-            <div className='mx-auto mt-20 max-w-md rounded-3xl border border-slate-700/70 bg-slate-900/70 p-8 shadow-2xl backdrop-blur'>
-               <div className='mb-8 flex items-center gap-3'>
-                  <div className='rounded-2xl bg-cyan-400/90 p-3 text-slate-900'>
-                     <FiLogIn className='text-xl' />
-                  </div>
-                  <div>
-                     <h1 className='text-2xl font-bold'>Admin</h1>
-                     <p className='text-sm text-slate-400'>
-                        Static login screen (API later)
-                     </p>
-                  </div>
-               </div>
-
-               <div className='space-y-4'>
-                  <input className='input-dark' placeholder='Username' />
-                  <input
-                     className='input-dark'
-                     placeholder='Password'
-                     type='password'
-                  />
-                  <button
-                     className='w-full rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-cyan-300'
-                     onClick={() => dispatch(setLoggedIn(true))}
-                  >
-                     Continue To Admin
-                  </button>
-               </div>
-            </div>
-         </div>
-      );
+      return <LoginPage />;
    }
 
    return (
@@ -1419,9 +1531,10 @@ const App = () => {
                      <ProfileMenu
                         open={profileOpen}
                         onToggle={() => dispatch(toggleProfile())}
+                        username={username}
                         onLogout={() => {
                            dispatch(closeProfile());
-                           dispatch(setLoggedIn(false));
+                           dispatch(logout());
                         }}
                      />
                   </div>

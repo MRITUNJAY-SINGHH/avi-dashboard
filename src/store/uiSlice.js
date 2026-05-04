@@ -5,6 +5,7 @@ const getDefaultOpenMenus = () => ({
    products: false,
    colors: false,
    categories: false,
+   attributes: false,
    'shop-owner': false,
    salesman: false,
    users: false,
@@ -15,7 +16,6 @@ const getDefaultOpenMenus = () => ({
 const uiSlice = createSlice({
    name: 'ui',
    initialState: {
-      isLoggedIn: false,
       searchText: '',
       profileOpen: false,
       notice: { type: 'idle', text: '' },
@@ -23,9 +23,6 @@ const uiSlice = createSlice({
       openMenus: getDefaultOpenMenus(),
    },
    reducers: {
-      setLoggedIn(state, action) {
-         state.isLoggedIn = action.payload;
-      },
       setSearchText(state, action) {
          state.searchText = action.payload;
       },
@@ -55,7 +52,6 @@ const uiSlice = createSlice({
 });
 
 export const {
-   setLoggedIn,
    setSearchText,
    toggleProfile,
    closeProfile,

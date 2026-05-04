@@ -1,7 +1,11 @@
 import React from 'react';
 import { FiChevronDown, FiLogOut, FiSettings, FiUser } from 'react-icons/fi';
 
-const ProfileMenu = ({ open, onToggle, onLogout }) => {
+const ProfileMenu = ({ open, onToggle, onLogout, username }) => {
+   const initials = username
+      ? username.slice(0, 2).toUpperCase()
+      : 'AD';
+
    return (
       <div className='relative'>
          <button
@@ -9,9 +13,9 @@ const ProfileMenu = ({ open, onToggle, onLogout }) => {
             onClick={onToggle}
          >
             <span className='flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500 text-xs font-bold text-white'>
-               AD
+               {initials}
             </span>
-            Profile
+            {username || 'Admin'}
             <FiChevronDown className='text-slate-500' />
          </button>
 
